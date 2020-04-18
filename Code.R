@@ -1,81 +1,48 @@
-pacman::p_load(tidyverse, skimr, sf, ggthemes)
+pacman::p_load(tidyverse, lubridate, skimr)
 
-#df = read.csv('us-states.csv', colClasses = c("fips" = "character", "date" = "Date")) 
-df = read.csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv', colClasses = c("fips" = "character", "date" = "Date"))
+year2019 = read.csv('Data/NO2_PICKDATA_2019-1-1.csv') %>% 
+       filter(substr(date, 6, 7) == '03')  %>% 
+       mutate(NO2 = value * 1000) %>% 
+       select(- c(units, prelim, quality)) %>% 
+       mutate(site = as.character(site), date = date(date), DOW = wday(date, label = TRUE))  
 
-latest.df = df %>% 
-    group_by(state) %>% 
-    arrange(desc(date)) %>% 
-    slice(1) %>% 
-    ungroup() %>% 
-    filter(cases > 1200) %>% 
-    arrange(desc(cases))
+year2019.2 = year2019 %>% 
+       group_by(site, date) %>% 
+#       arrange(-NO2) %>% 
+#       slice(1) %>% 
+        summarize(NO2 = mean(NO2)) %>% 
+        ungroup() %>% 
+        mutate(DOW = wday(date, label = TRUE))  
 
-slice(latest.df, 1:15)
+year2020 = read.csv('Data/NO2_PICKDATA_2020-3-26.csv') %>% 
+       filter(substr(date, 6, 7) == '03')  %>% 
+       mutate(NO2 = value * 1000) %>% 
+       select(- c(units, prelim, quality)) %>% 
+       mutate(site = as.character(site), date = date(date), DOW = wday(date, label = TRUE))
+
+year2020.2 = year2020 %>% 
+       group_by(site, date) %>% 
+       #arrange(-NO2) %>% 
+       #slice(1) %>% 
+       summarize(NO2 = mean(NO2)) %>% 
+        ungroup() %>% 
+        mutate(DOW = wday(date, label = TRUE))  
+
+WeekendName = c('Sat', 'Sun')
+df = rbind(year2019.2, year2020.2) %>% 
+       mutate(Year = year(date), Weekend = ifelse(DOW %in% WeekendName, 'Weekend', 'Weekday'), day = day(date))
+#      substr(date, 1, 4), Day = as.numeric(substr(date, 9, 10)))
+
+df %>%  
+        filter(day(date) >= 15) %>% 
+       group_by(site, Year, Weekend) %>% 
+       summarize(NO2 = mean(NO2)) 
 
 df %>% 
-#  filter(fips == '06') %>% 
-  filter(state %in% latest.df$state, date > as.Date("2020-02-25")) %>% 
-  group_by(state) %>%  
-  mutate(New.Case = cases - lag(cases), New.Death = deaths - lag(deaths)) %>%
-  ungroup() %>% 
-  filter(!is.na(New.Case)) %>% 
-  ggplot(aes(x = date, y = New.Case)) +
-#  ggplot(aes(x = date, y = New.Death)) +
-    geom_bar(stat = 'identity', fill = 'steelblue') +
-    facet_wrap(~state, scales = 'free') +
-    theme_minimal()
+        filter(day(date) >= 15) %>% 
+       ggplot(aes(x = day, y = NO2, color = as.factor(Year))) +
+       geom_line() +
+       geom_point() +
+       facet_wrap(~site) +
+       theme_minimal()
 
-df %>%
-  filter(state %in% latest.df$state, date > as.Date("2020-02-25")) %>% 
-  #group_by(state) %>%
-  #arrange(date) %>%
-  #mutate(cum.cases = cumsum(cases)) %>%
-  #ungroup() %>%
-  #group_by(type, Province.State, date) %>%
-  #summarize(cum.cases2 = sum(cum.cases)) %>%
-  #ungroup() %>%
-  ggplot(aes(x = date, y = (cases))) + #, color = type)) +
-    geom_point() +
-    geom_line() +
-    facet_wrap(~state, scales = 'free') +
-    theme_fivethirtyeight()
-
-df %>%
-  filter(state %in% latest.df$state, date > as.Date("2020-02-25")) %>% 
-  ggplot(aes(x = date, y = log(cases), color = state)) + #, color = type)) +
-  geom_point() +
-  geom_line() +
-#  facet_wrap(~state, scales = 'free') +
-  theme_fivethirtyeight()
-
-# Case by County
-
-#df2 = read.csv('us-counties.csv', colClasses = c("fips" = "character", "date" = "Date"))
-df2 = read.csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv', colClasses = c("fips" = "character", "date" = "Date"))
-
-Bay.Area = c('041', '097', '055', '095', '013', '001', '085', '087', '081', '075', '037')
-#Bay.Area = c('013', '001',  '075')
-
-df2 %>% 
-  filter(state == 'California', date > as.Date("2020-02-25")) %>% 
-  filter(substr(fips, 3, 5) %in% Bay.Area) %>% 
-#  filter(county == 'San Francisco') %>% 
-  group_by(county) %>%  
-  mutate(New.Case = cases - lag(cases)) %>% 
-  filter(!is.na(New.Case)) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = date, y = New.Case)) +
-      #geom_line() +
-      #geom_point() +
-      geom_bar(stat = 'identity', fill = 'steelblue') +
-      facet_wrap(~county, scales = 'free') +
-      #theme_minimal() +
-      geom_vline(xintercept = as.Date('2020-03-16')) + 
-      geom_text(mapping = aes(label = 'Shelter in place declared', x = as.Date('2020-03-16'), y = -0.75), angle = 0, hjust = 0) +
-      theme_fivethirtyeight()
-
-df2 %>% 
-#  filter(state == 'California',date == as.Date("2020-03-30")) %>% 
-  filter(county == 'Santa Clara') %>% 
-  arrange(-cases)
